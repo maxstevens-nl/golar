@@ -143,6 +143,10 @@ func (d *diagnosticProxy) File() diagnosticwriter.FileLike {
 		if file.GolarLanguageData == nil {
 			return file
 		}
+		d.sourceLoc()
+		if !d.hasSource {
+			return file
+		}
 		return &fileProxy{SourceFile: file}
 	}
 	return nil
