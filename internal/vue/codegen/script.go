@@ -12,13 +12,17 @@ type scriptCodegenCtx struct {
 	*codegenCtx
 	scriptSetupEl *vue_ast.ElementNode
 	scriptEl      *vue_ast.ElementNode
+	generics      string
+	templateEl    *vue_ast.ElementNode
 }
 
-func generateScript(base *codegenCtx, scriptSetupEl *vue_ast.ElementNode, scriptEl *vue_ast.ElementNode) {
+func generateScript(base *codegenCtx, scriptSetupEl *vue_ast.ElementNode, scriptEl *vue_ast.ElementNode, generics string, templateEl *vue_ast.ElementNode) {
 	c := scriptCodegenCtx{
 		codegenCtx:    base,
 		scriptSetupEl: scriptSetupEl,
 		scriptEl:      scriptEl,
+		generics:      generics,
+		templateEl:    templateEl,
 	}
 
 	c.serviceText.WriteString("import { defineComponent as __VLS_DefineComponent } from 'vue'\n")
@@ -66,7 +70,6 @@ func generateScript(base *codegenCtx, scriptSetupEl *vue_ast.ElementNode, script
 		// TODO: options wrapper - wrap export default |defineComponent(|{}|)|
 	}
 
-	// TODO: generic support
 	if c.scriptSetupEl != nil {
 		if len(c.scriptSetupEl.Children) != 1 {
 			panic("TODO: len of <script setup> children != 1")
@@ -74,10 +77,14 @@ func generateScript(base *codegenCtx, scriptSetupEl *vue_ast.ElementNode, script
 
 		text := c.scriptSetupEl.Children[0].AsText()
 
-		if c.scriptEl != nil {
+		if c.generics != "" {
+			// Wrap in immediately-invoked generic arrow function so type params are in scope
+			c.serviceText.WriteString("const __VLS_Export = (<")
+			c.serviceText.WriteString(c.generics)
+			c.serviceText.WriteString(">() => {\n")
+		} else if c.scriptEl != nil {
 			c.serviceText.WriteString("const __VLS_Export = await (async () => {\n")
 		} else {
-			// TODO
 			c.serviceText.WriteString("const __VLS_Export = __VLS_DefineComponent({})\n")
 		}
 		innerStart := c.scriptSetupEl.InnerLoc.Pos()
@@ -159,7 +166,16 @@ func generateScript(base *codegenCtx, scriptSetupEl *vue_ast.ElementNode, script
 		}
 		c.serviceText.WriteString("}\n")
 
-		if c.scriptEl != nil {
+		if c.generics != "" {
+			// Generate template code inside the generic scope
+			generateTemplate(c.codegenCtx, c.templateEl)
+			// Close the generic wrapper
+			c.serviceText.WriteString("return {} as unknown as typeof __VLS_Ctx\n})()\n")
+			for _, loc := range importRanges {
+				c.mapText(loc.Pos(), loc.End())
+				c.serviceText.WriteString("\n")
+			}
+		} else if c.scriptEl != nil {
 			c.serviceText.WriteString("\n})()\n")
 			for _, loc := range importRanges {
 				c.mapText(loc.Pos(), loc.End())
@@ -167,7 +183,9 @@ func generateScript(base *codegenCtx, scriptSetupEl *vue_ast.ElementNode, script
 			}
 		}
 
-		if c.scriptEl == nil {
+		if c.scriptEl == nil && c.generics == "" {
+			c.serviceText.WriteString("export default {} as unknown as Awaited<typeof __VLS_Export>\n")
+		} else if c.generics != "" {
 			c.serviceText.WriteString("export default {} as unknown as Awaited<typeof __VLS_Export>\n")
 		}
 	}

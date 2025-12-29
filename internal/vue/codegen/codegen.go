@@ -40,6 +40,8 @@ func Codegen(sourceText string, root *vue_ast.RootNode) (string, []mapping.Mappi
 	var scriptSetupEl *vue_ast.ElementNode
 	var templateEl *vue_ast.ElementNode
 
+	var scriptSetupGenerics string
+
 RootChild:
 	for _, child := range root.Children {
 		if child.Kind != vue_ast.KindElement {
@@ -49,18 +51,28 @@ RootChild:
 		el := child.AsElement()
 
 		if el.Tag == "script" {
+			isSetup := false
+			var genericsValue string
 			for _, prop := range el.Props {
 				if prop.Kind == vue_ast.KindAttribute {
 					attr := prop.AsAttribute()
 					if attr.Name == "setup" {
-						if scriptSetupEl != nil {
-							ctx.reportDiagnostic(el.Loc.WithEnd(el.InnerLoc.Pos()), vue_diagnostics.Single_file_component_can_contain_only_one_script_setup_element)
-						} else {
-							scriptSetupEl = el
-						}
-						continue RootChild
+						isSetup = true
+					}
+					if attr.Name == "generic" && attr.Value != nil {
+						genericsValue = attr.Value.Content
 					}
 				}
+			}
+
+			if isSetup {
+				if scriptSetupEl != nil {
+					ctx.reportDiagnostic(el.Loc.WithEnd(el.InnerLoc.Pos()), vue_diagnostics.Single_file_component_can_contain_only_one_script_setup_element)
+				} else {
+					scriptSetupEl = el
+					scriptSetupGenerics = genericsValue
+				}
+				continue RootChild
 			}
 
 			if scriptEl != nil {
@@ -100,7 +112,7 @@ RootChild:
 
 	{
 		c := newCodegenCtx(root, sourceText)
-		generateScript(&c, scriptSetupEl, scriptEl)
+		generateScript(&c, scriptSetupEl, scriptEl, scriptSetupGenerics, templateEl)
 		newMappingsStart := len(ctx.mappings)
 		ctx.mappings = append(ctx.mappings, c.mappings...)
 		for i := newMappingsStart; i < len(ctx.mappings); i++ {
@@ -110,7 +122,9 @@ RootChild:
 		ctx.diagnostics = append(ctx.diagnostics, c.diagnostics...)
 	}
 
-	{
+	// Template is generated inside script when generics are present,
+	// otherwise generate it separately
+	if scriptSetupGenerics == "" {
 		c := newCodegenCtx(root, sourceText)
 		generateTemplate(&c, templateEl)
 		newMappingsStart := len(ctx.mappings)
