@@ -22,46 +22,191 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-// Tests not in this list will be skipped.
-var enabledTests = map[string]bool{
-	// Tests that currently pass (no diagnostics expected)
-	"#2048": true,
-	"#2166": true,
-	"#2250": true,
-	"#2308": true,
-	"#2431": true,
-	"#2629": true,
-	"#2678": true,
-	"#2683": true,
-	"#3138": true,
-	"#3255": true,
-	"#3374": true,
-	"#3433": true,
-	"#3488": true,
-	"#3518": true,
-	"#3718": true,
-	"#3845": true,
-	"#4209": true,
-	"#4369": true,
-	"#4413": true,
-	"#5111": true,
-	"#5267": true,
-	"#5428": true,
-	"#5492": true,
-	"#5729": true,
-	"#5751": true,
-	"#5810": true,
-	"#5819": true,
-	"#5899": true,
-	"#625":  true,
-	"v-if":  true,
-
-	// Expected failure tests (these should produce errors)
-	"_failed_#3632":      true,
-	"_failed_#4569":      true,
-	"_failed_#5071":      true,
-	"_failed_#5823":      true,
-	"_failed_directives": true,
+// skippedTests contains tests that are known to fail.
+// Remove tests from this list as they are fixed.
+var skippedTests = map[string]bool{
+	"#1855":                 true,
+	"#1886":                 true,
+	"#2157":                 true,
+	"#2206":                 true,
+	"#2225":                 true,
+	"#2370":                 true,
+	"#2399":                 true,
+	"#2468":                 true,
+	"#2472":                 true,
+	"#2514":                 true,
+	"#2554":                 true,
+	"#2586":                 true,
+	"#2588":                 true,
+	"#2590":                 true,
+	"#2617":                 true,
+	"#2638":                 true,
+	"#2639":                 true,
+	"#2640":                 true,
+	"#2646":                 true,
+	"#2647":                 true,
+	"#2691":                 true,
+	"#2700":                 true,
+	"#2709":                 true,
+	"#2712":                 true,
+	"#2720":                 true,
+	"#2725":                 true,
+	"#2726":                 true,
+	"#2730":                 true,
+	"#2744":                 true,
+	"#2754":                 true,
+	"#2758":                 true,
+	"#3100":                 true,
+	"#3102":                 true,
+	"#3109":                 true,
+	"#3117":                 true,
+	"#3121":                 true,
+	"#3122":                 true,
+	"#3123":                 true,
+	"#3129":                 true,
+	"#3140":                 true,
+	"#3152":                 true,
+	"#3164":                 true,
+	"#3171":                 true,
+	"#3204":                 true,
+	"#3257":                 true,
+	"#3258":                 true,
+	"#3289":                 true,
+	"#329":                  true,
+	"#3295":                 true,
+	"#3311":                 true,
+	"#3318":                 true,
+	"#3327":                 true,
+	"#3340":                 true,
+	"#3353":                 true,
+	"#3371":                 true,
+	"#3373":                 true,
+	"#3379":                 true,
+	"#3405":                 true,
+	"#3414":                 true,
+	"#3440":                 true,
+	"#3476":                 true,
+	"#3539":                 true,
+	"#3561":                 true,
+	"#3574":                 true,
+	"#3592":                 true,
+	"#3612":                 true,
+	"#3615":                 true,
+	"#3629":                 true,
+	"#3637":                 true,
+	"#3643":                 true,
+	"#3656":                 true,
+	"#3671":                 true,
+	"#3672":                 true,
+	"#3688":                 true,
+	"#3732":                 true,
+	"#3748":                 true,
+	"#3756":                 true,
+	"#3779":                 true,
+	"#3782":                 true,
+	"#3819":                 true,
+	"#3820":                 true,
+	"#3997":                 true,
+	"#4050":                 true,
+	"#4263":                 true,
+	"#4326":                 true,
+	"#4327":                 true,
+	"#4333":                 true,
+	"#4353":                 true,
+	"#4361":                 true,
+	"#4386":                 true,
+	"#4387":                 true,
+	"#4391":                 true,
+	"#4433":                 true,
+	"#4503":                 true,
+	"#4512":                 true,
+	"#4537":                 true,
+	"#4539":                 true,
+	"#4540":                 true,
+	"#4600":                 true,
+	"#4604":                 true,
+	"#4646":                 true,
+	"#4649":                 true,
+	"#4668":                 true,
+	"#4682":                 true,
+	"#4699":                 true,
+	"#4785":                 true,
+	"#4799":                 true,
+	"#4812":                 true,
+	"#4820":                 true,
+	"#4822":                 true,
+	"#4826":                 true,
+	"#4827":                 true,
+	"#4828":                 true,
+	"#4862":                 true,
+	"#4878":                 true,
+	"#4890":                 true,
+	"#4899":                 true,
+	"#4972":                 true,
+	"#4978":                 true,
+	"#4979":                 true,
+	"#5027":                 true,
+	"#5067":                 true,
+	"#5097":                 true,
+	"#5106":                 true,
+	"#5120":                 true,
+	"#5136":                 true,
+	"#5157":                 true,
+	"#5159":                 true,
+	"#5207":                 true,
+	"#5228":                 true,
+	"#5262":                 true,
+	"#5338":                 true,
+	"#5474":                 true,
+	"#5592":                 true,
+	"#5604":                 true,
+	"#5617":                 true,
+	"#5680":                 true,
+	"#5776":                 true,
+	"#5780":                 true,
+	"#5840":                 true,
+	"#5843":                 true,
+	"#5895":                 true,
+	"attrs":                 true,
+	"components":            true,
+	"core#9923":             true,
+	"cssModule":             true,
+	"dataAttributes":        true,
+	"defineEmits":           true,
+	"defineExpose":          true,
+	"defineModel":           true,
+	"defineModelModifiers":  true,
+	"defineOptions":         true,
+	"directiveComments":     true,
+	"directives":            true,
+	"dynamic-component":     true,
+	"events":                true,
+	"fallthroughAttributes": true,
+	"fallthroughAttributes_duplicateNameEvent": true,
+	"fallthroughAttributes_duplicateNameProp":  true,
+	"fallthroughAttributes_generic":            true,
+	"fallthroughAttributes_requiredProp":       true,
+	"fallthroughAttributes_unknownTag":         true,
+	"input-radio":                              true,
+	"intrinsicProps":                           true,
+	"namespace-component":                      true,
+	"no-script-block":                          true,
+	"noPropertyAccessFromIndexSignature":       true,
+	"pug":                                      true,
+	"reference-type-in-template":               true,
+	"rootEl":                                   true,
+	"script-setup-scope":                       true,
+	"script_src":                               true,
+	"slots":                                    true,
+	"templateRef":                              true,
+	"type-helpers":                             true,
+	"unknownProp":                              true,
+	"unknownTag":                               true,
+	"v-bind-require-object":                    true,
+	"v-bind-shorthand":                         true,
+	"v-for":                                    true,
+	"v-generic":                                true,
+	"withDefaults":                             true,
 }
 
 // vueTscSys implements tsc.System for running vue-tsc build tests
@@ -240,6 +385,14 @@ func TestVueTscBuildIndividual(t *testing.T) {
 	}
 
 	var enabledCount, skippedCount int
+	for _, testDir := range testDirs {
+		if skippedTests[testDir] {
+			skippedCount++
+		} else {
+			enabledCount++
+		}
+	}
+	t.Logf("Test directories: %d total, %d enabled, %d skipped", len(testDirs), enabledCount, skippedCount)
 
 	for _, testDir := range testDirs {
 		isExpectedFailure := strings.HasPrefix(testDir, "_failed_")
@@ -247,12 +400,10 @@ func TestVueTscBuildIndividual(t *testing.T) {
 		t.Run(testDir, func(t *testing.T) {
 			t.Parallel()
 
-			if !enabledTests[testDir] {
-				skippedCount++
-				t.Skipf("Test %s is not in enabledTests allowlist", testDir)
+			if skippedTests[testDir] {
+				t.Skipf("Test %s is in skippedTests list", testDir)
 				return
 			}
-			enabledCount++
 
 			testPath := filepath.Join(tscPath, testDir)
 			sys := newVueTscSys(testPath)
@@ -289,8 +440,6 @@ func TestVueTscBuildIndividual(t *testing.T) {
 			}
 		})
 	}
-
-	t.Logf("Test directories: %d total, %d enabled, %d skipped", len(testDirs), enabledCount, skippedCount)
 }
 
 func TestVueTscSnapshot(t *testing.T) {
