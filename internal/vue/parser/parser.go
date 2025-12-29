@@ -396,22 +396,27 @@ func (p *Parser) onattribend(quote QuoteType, end int) {
 						}
 					}
 				} else {
-					var prefixLen int
-					var suffixLen int
-					var expressionText string
+					var prefix string
+					var suffix string
 					switch prop.Name {
 					case "slot":
-						panic("TODO: v-slot")
+						prefix = "("
+						suffix = ") => {}"
 					case "on":
-						panic("TODO: v-on")
+						if strings.Contains(p.currentAttrValue, ";") {
+							prefix = "($event) => { "
+							suffix = " }"
+						} else {
+							prefix = "($event) => ("
+							suffix = ")"
+						}
 					default:
-						prefixLen = 1
-						suffixLen = 1
-						expressionText = "(" + p.currentAttrValue + ")"
+						prefix = "("
+						suffix = ")"
 					}
 					prop.Expression = vue_ast.NewSimpleExpressionNode(ParseTsAst(
-						expressionText,
-					), core.NewTextRange(p.currentAttrStartIndex, p.currentAttrEndIndex), prefixLen, suffixLen)
+						prefix+p.currentAttrValue+suffix,
+					), core.NewTextRange(p.currentAttrStartIndex, p.currentAttrEndIndex), len(prefix), len(suffix))
 				}
 				// if currentProp.name == "for" {
 				// 	currentProp.forParseResult = parseForExpression(currentProp.exp)
