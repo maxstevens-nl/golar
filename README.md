@@ -26,6 +26,15 @@ cd ..
 go build -o golar ./typescript-go/cmd/tsgo
 ```
 
+## Testing
+
+```bash
+go test -v ./...
+
+# Single test
+go test -v ./... -run TEST_NAME
+```
+
 ## License
 
 [MIT](./LICENSE)
