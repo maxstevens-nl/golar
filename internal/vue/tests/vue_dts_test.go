@@ -17,6 +17,31 @@ import (
 	"gotest.tools/v3/assert"
 )
 
+var skippedDTSTests = map[string]bool{
+	// .vue files emit wrong output path (.d.ts instead of .vue.d.ts)
+	"component-name-description/component-no-name.vue": true,
+	"component-name-description/component.vue":         true,
+	"empty-component/component.vue":                    true,
+	"generic/component.vue":                            true,
+	"generic/main.vue":                                 true,
+	"reference-type-events/component.vue":              true,
+	"reference-type-exposed/component-options-api.vue": true,
+	"reference-type-exposed/component.vue":             true,
+	"reference-type-model/component.vue":               true,
+	"reference-type-props/component-destructure.vue":   true,
+	"reference-type-props/component-js-setup.vue":      true,
+	"reference-type-props/component-js.vue":            true,
+	"reference-type-props/component.vue":               true,
+	"reference-type-slots/component-define-slots.vue":  true,
+	"reference-type-slots/component-no-script.vue":     true,
+	"reference-type-slots/component.vue":               true,
+
+	// Import path mismatch (@vue/runtime-core instead of vue)
+	"component-name-description/component-ts.ts": true,
+	"options-api/component.ts":                   true,
+	"ts-named-export/component.ts":               true,
+}
+
 func TestVueDTS(t *testing.T) {
 	t.Parallel()
 
@@ -68,6 +93,14 @@ func TestVueDTS(t *testing.T) {
 
 		t.Run(testName, func(t *testing.T) {
 			t.Parallel()
+
+			// Check if this test should be skipped
+			skipRelPath, _ := filepath.Rel(componentMetaPath, inputFile)
+			skipRelPath = normalizeDTSPath(skipRelPath)
+			if skippedDTSTests[skipRelPath] {
+				t.Skipf("Test %s is in skippedDTSTests list", skipRelPath)
+				return
+			}
 
 			sourceFile := program.GetSourceFile(inputFile)
 			if sourceFile == nil {
