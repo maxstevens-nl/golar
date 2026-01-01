@@ -19,11 +19,11 @@ import (
 const tsgoInternalPrefix = "github.com/microsoft/typescript-go/internal/"
 
 type ExtraShim struct {
-	ExtraFunctions  []string
-	ExtraMethods    map[string]([]string)
-	ExtraFields     map[string]([]string)
-	ExtraFieldSetters     map[string]([]string)
-	IgnoreFunctions []string
+	ExtraFunctions    []string
+	ExtraMethods      map[string]([]string)
+	ExtraFields       map[string]([]string)
+	ExtraFieldSetters map[string]([]string)
+	IgnoreFunctions   []string
 }
 
 func main() {
@@ -37,6 +37,8 @@ func main() {
 		"core",
 		"diagnostics",
 		"diagnosticwriter",
+		"execute",
+		"execute/tsc",
 		"fourslash",
 		"golarext",
 		"lsp/lsproto",
