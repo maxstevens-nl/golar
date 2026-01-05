@@ -43,6 +43,7 @@ require (
 	github.com/microsoft/typescript-go/shim/golarext v0.0.0
 	github.com/microsoft/typescript-go/shim/lsp/lsproto v0.0.0
 	github.com/microsoft/typescript-go/shim/parser v0.0.0
+	github.com/microsoft/typescript-go/shim/scanner v0.0.0-00010101000000-000000000000
 	github.com/microsoft/typescript-go/shim/testutil v0.0.0
 	github.com/microsoft/typescript-go/shim/tsoptions v0.0.0
 	github.com/microsoft/typescript-go/shim/tspath v0.0.0

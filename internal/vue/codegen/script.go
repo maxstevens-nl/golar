@@ -1,7 +1,9 @@
 package vue_codegen
 
 import (
+	"github.com/auvred/golar/internal/utils"
 	"github.com/auvred/golar/internal/vue/ast"
+	"github.com/auvred/golar/internal/vue/diagnostics"
 	"github.com/microsoft/typescript-go/shim/ast"
 	"github.com/microsoft/typescript-go/shim/core"
 )
@@ -14,52 +16,50 @@ type scriptCodegenCtx struct {
 	scriptEl      *vue_ast.ElementNode
 }
 
-func generateScript(base *codegenCtx, scriptSetupEl *vue_ast.ElementNode, scriptEl *vue_ast.ElementNode) {
+func generateScript(base *codegenCtx, scriptSetupEl *vue_ast.ElementNode, scriptEl *vue_ast.ElementNode, templateEl *vue_ast.ElementNode) {
 	c := scriptCodegenCtx{
 		codegenCtx:    base,
 		scriptSetupEl: scriptSetupEl,
 		scriptEl:      scriptEl,
 	}
 
-	c.serviceText.WriteString("import { defineComponent as __VLS_DefineComponent } from 'vue'\n")
+	c.serviceText.WriteString("import { defineComponent as __VLS_DefineComponent, defineProps } from 'vue'\n")
 
 	var selfType string
 	if c.scriptEl != nil {
-		if len(c.scriptEl.Children) > 1 {
-			panic("TODO: len of <script> children > 1")
+		if len(c.scriptEl.Children) != 1 {
+			panic("TODO: len of <script> children != 1")
 		}
 
 		innerStart := c.scriptEl.InnerLoc.Pos()
+		text := c.scriptEl.Children[0].AsText()
+
+		mapStart := text.Loc.Pos()
 		hasExportDefault := false
 
-		if len(c.scriptEl.Children) == 1 {
-			text := c.scriptEl.Children[0].AsText()
-			mapStart := text.Loc.Pos()
-
-			for _, statement := range c.scriptEl.Ast.Statements.Nodes {
-				if !ast.IsExportAssignment(statement) {
-					continue
-				}
-
-				hasExportDefault = true
-				export := statement.AsExportAssignment()
-				c.mapText(mapStart, innerStart+export.Expression.Pos())
-				c.serviceText.WriteString(" {} as unknown as typeof __VLS_Export\n")
-				if c.scriptSetupEl == nil {
-					c.serviceText.WriteString("const __VLS_Export = ")
-					selfType = "__VLS_Export"
-				} else {
-					c.serviceText.WriteString("const __VLS_Self = ")
-					selfType = "__VLS_Self"
-				}
-				mapStart = innerStart + export.Expression.Pos()
-
-				break
+		for _, statement := range c.scriptEl.Ast.Statements.Nodes {
+			if !ast.IsExportAssignment(statement) {
+				continue
 			}
 
-			c.mapText(mapStart, text.Loc.End())
-			c.serviceText.WriteString("\n\n")
+			hasExportDefault = true
+			export := statement.AsExportAssignment()
+			c.mapText(mapStart, innerStart+export.Expression.Pos())
+			c.serviceText.WriteString(" {} as unknown as typeof __VLS_Export\n")
+			if c.scriptSetupEl == nil {
+				c.serviceText.WriteString("const __VLS_Export = ")
+				selfType = "__VLS_Export"
+			} else {
+				c.serviceText.WriteString("const __VLS_Self = ")
+				selfType = "__VLS_Self"
+			}
+			mapStart = innerStart + export.Expression.Pos()
+
+			break
 		}
+
+		c.mapText(mapStart, text.Loc.End())
+		c.serviceText.WriteString("\n\n")
 
 		if !hasExportDefault {
 			c.serviceText.WriteString("const __VLS_Export = __VLS_DefineComponent({})\nexport default __VLS_Export\n")
@@ -70,89 +70,137 @@ func generateScript(base *codegenCtx, scriptSetupEl *vue_ast.ElementNode, script
 
 	// TODO: generic support
 	if c.scriptSetupEl != nil {
-		if len(c.scriptSetupEl.Children) > 1 {
-			panic("TODO: len of <script setup> children > 1")
+		if len(c.scriptSetupEl.Children) != 1 {
+			panic("TODO: len of <script setup> children != 1")
 		}
 
-		if c.scriptEl != nil {
-			c.serviceText.WriteString("const __VLS_Export = await (async () => {\n")
-		} else {
-			// TODO
-			c.serviceText.WriteString("const __VLS_Export = __VLS_DefineComponent({})\n")
-		}
+		text := c.scriptSetupEl.Children[0].AsText()
+
+		c.serviceText.WriteString("const __VLS_Export = (async () => {\n")
 		innerStart := c.scriptSetupEl.InnerLoc.Pos()
+
+		lastMappedPos := text.Loc.Pos()
+
+		var propsVariableName string
+
+		// TODO: report nested compiler macros (vue compiler errors on them)
 
 		bindingRanges := []core.TextRange{}
 		importRanges := []core.TextRange{}
-
-		if len(c.scriptSetupEl.Children) == 1 {
-			text := c.scriptSetupEl.Children[0].AsText()
-			lastMappedPos := text.Loc.Pos()
-
-			for _, statement := range c.scriptSetupEl.Ast.Statements.Nodes {
-				switch statement.Kind {
-				case ast.KindVariableStatement:
-					for _, decl := range statement.AsVariableStatement().DeclarationList.AsVariableDeclarationList().Declarations.Nodes {
-						name := decl.AsVariableDeclaration().Name()
-						var visitor ast.Visitor
-						visitor = func(n *ast.Node) bool {
-							if ast.IsIdentifier(n) {
-								bindingRanges = append(bindingRanges, n.Loc)
-							}
-							return n.ForEachChild(visitor)
+		for _, statement := range c.scriptSetupEl.Ast.Statements.Nodes {
+			switch statement.Kind {
+			case ast.KindVariableStatement:
+				for _, d := range statement.AsVariableStatement().DeclarationList.AsVariableDeclarationList().Declarations.Nodes {
+					decl := d.AsVariableDeclaration()
+					name := decl.Name()
+					var visitor ast.Visitor
+					// TODO: binding pattern?
+					// TODO: declare const?
+					visitor = func(n *ast.Node) bool {
+						if ast.IsIdentifier(n) {
+							bindingRanges = append(bindingRanges, n.Loc)
 						}
-						visitor(name)
+						return n.ForEachChild(visitor)
 					}
-				case ast.KindFunctionDeclaration, ast.KindClassDeclaration, ast.KindEnumDeclaration:
-					if name := statement.Name(); name != nil {
-						bindingRanges = append(bindingRanges, name.Loc)
-					}
-				case ast.KindImportDeclaration:
-					if c.scriptEl != nil {
-						importRanges = append(importRanges, core.NewTextRange(innerStart+statement.Loc.Pos(), innerStart+statement.Loc.End()))
-						if lastMappedPos != statement.Pos() {
-							c.mapText(lastMappedPos, innerStart+statement.Pos())
-						}
-						lastMappedPos = innerStart + statement.End()
-					}
-					importClause := statement.AsImportDeclaration().ImportClause
-					if importClause != nil {
-						if importClause.Name() != nil {
-							bindingRanges = append(bindingRanges, importClause.Name().Loc)
-						}
+					visitor(name)
 
-						namedBindings := importClause.AsImportClause().NamedBindings
-						if namedBindings != nil {
-							if ast.IsNamespaceImport(namedBindings) {
-								bindingRanges = append(bindingRanges, namedBindings.Name().Loc)
-							} else {
-								for _, element := range namedBindings.Elements() {
-									bindingRanges = append(bindingRanges, element.Name().Loc)
-								}
+					// TODO: report props destructuring?
+					if !ast.IsIdentifier(name) {
+						break
+					}
+					if decl.Initializer == nil || !ast.IsCallExpression(decl.Initializer) {
+						break
+					}
+
+					call := decl.Initializer.AsCallExpression()
+					callee := call.Expression
+					if !ast.IsIdentifier(callee) {
+						break
+					}
+					calleeName := callee.Text()
+					if calleeName != "defineProps" {
+						break
+					}
+					if propsVariableName != "" {
+						calleeLoc := utils.TrimNodeTextRange(c.scriptSetupEl.Ast, callee)
+						c.reportDiagnostic(core.NewTextRange(innerStart+calleeLoc.Pos(), innerStart+calleeLoc.End()), vue_diagnostics.Duplicate_X_0_call, "defineProps")
+						break
+					}
+					propsVariableName = name.Text()
+				}
+			case ast.KindExpressionStatement:
+				expr := statement.AsExpressionStatement().Expression
+				if !ast.IsCallExpression(expr) {
+					break
+				}
+				call := expr.AsCallExpression()
+				callee := call.Expression
+				if !ast.IsIdentifier(callee) {
+					break
+				}
+				calleeName := callee.Text()
+				if calleeName != "defineProps" {
+					break
+				}
+				if propsVariableName != "" {
+					calleeLoc := utils.TrimNodeTextRange(c.scriptSetupEl.Ast, callee)
+					c.reportDiagnostic(core.NewTextRange(innerStart+calleeLoc.Pos(), innerStart+calleeLoc.End()), vue_diagnostics.Duplicate_X_0_call, "defineProps")
+					break
+				}
+				propsVariableName = "__VLS_Props"
+				c.mapText(lastMappedPos, innerStart+statement.Pos())
+				c.serviceText.WriteString("const __VLS_Props = ")
+				c.mapText(innerStart+statement.Pos(), innerStart+statement.End())
+				lastMappedPos = innerStart + statement.End()
+			case ast.KindFunctionDeclaration, ast.KindClassDeclaration, ast.KindEnumDeclaration:
+				if name := statement.Name(); name != nil {
+					bindingRanges = append(bindingRanges, name.Loc)
+				}
+			case ast.KindImportDeclaration:
+				importRanges = append(importRanges, core.NewTextRange(innerStart+statement.Loc.Pos(), innerStart+statement.Loc.End()))
+				if lastMappedPos != statement.Pos() {
+					c.mapText(lastMappedPos, innerStart+statement.Pos())
+				}
+				lastMappedPos = innerStart + statement.End()
+
+				importClause := statement.AsImportDeclaration().ImportClause
+				if importClause != nil {
+					if importClause.Name() != nil {
+						bindingRanges = append(bindingRanges, importClause.Name().Loc)
+					}
+
+					namedBindings := importClause.AsImportClause().NamedBindings
+					if namedBindings != nil {
+						if ast.IsNamespaceImport(namedBindings) {
+							bindingRanges = append(bindingRanges, namedBindings.Name().Loc)
+						} else {
+							for _, element := range namedBindings.Elements() {
+								bindingRanges = append(bindingRanges, element.Name().Loc)
 							}
 						}
 					}
 				}
 			}
-			c.mapText(lastMappedPos, text.Loc.End())
 		}
+		c.mapText(lastMappedPos, text.Loc.End())
 		c.serviceText.WriteByte('\n')
 
-		if len(bindingRanges) > 0 {
-			c.serviceText.WriteString("type __VLS_SetupExposed = {\n")
-			// TODO: proxy refs
-			for _, binding := range bindingRanges {
-				c.serviceText.WriteString(c.sourceText[innerStart+binding.Pos() : innerStart+binding.End()])
-				c.serviceText.WriteString(": typeof ")
-				c.serviceText.WriteString(c.sourceText[innerStart+binding.Pos() : innerStart+binding.End()])
-				c.serviceText.WriteRune('\n')
-			}
-			c.serviceText.WriteString("}\n")
+		c.serviceText.WriteString("type __VLS_SetupExposed = {\n")
+		// TODO: proxy refs
+		for _, binding := range bindingRanges {
+			c.serviceText.WriteString(c.sourceText[innerStart+binding.Pos() : innerStart+binding.End()])
+			c.serviceText.WriteString(": typeof ")
+			c.serviceText.WriteString(c.sourceText[innerStart+binding.Pos() : innerStart+binding.End()])
+			c.serviceText.WriteRune('\n')
 		}
+		c.serviceText.WriteString("}\n")
 
 		c.serviceText.WriteString("const __VLS_Ctx = {\n")
-		if len(bindingRanges) > 0 {
-			c.serviceText.WriteString("...{} as unknown as __VLS_SetupExposed,\n")
+		c.serviceText.WriteString("...{} as unknown as __VLS_SetupExposed,\n")
+		if propsVariableName != "" {
+			c.serviceText.WriteString("...{} as unknown as typeof ")
+			c.serviceText.WriteString(propsVariableName)
+			c.serviceText.WriteString(",\n")
 		}
 		if selfType != "" {
 			c.serviceText.WriteString("...{} as unknown as InstanceType<__VLS_PickNotAny<typeof ")
@@ -162,19 +210,29 @@ func generateScript(base *codegenCtx, scriptSetupEl *vue_ast.ElementNode, script
 			c.serviceText.WriteString("...{} as unknown as import('vue').ComponentPublicInstance,\n")
 		}
 		c.serviceText.WriteString("}\n")
-		// Suppress unused variable warning - __VLS_Ctx is used in template codegen
-		c.serviceText.WriteString("void __VLS_Ctx;\n")
 
-		if c.scriptEl != nil {
-			c.serviceText.WriteString("\n})()\n")
-			for _, loc := range importRanges {
-				c.mapText(loc.Pos(), loc.End())
-				c.serviceText.WriteString("\n")
-			}
+		generateTemplate(c.codegenCtx, templateEl)
+
+		c.serviceText.WriteString("\nreturn __VLS_DefineComponent({\n")
+		if propsVariableName != "" {
+			c.serviceText.WriteString("__typeProps: {} as unknown as typeof ")
+			c.serviceText.WriteString(propsVariableName)
+			c.serviceText.WriteString(",\n")
+		}
+		c.serviceText.WriteString("})\n")
+
+		c.serviceText.WriteString("\n})()\n")
+		for _, loc := range importRanges {
+			c.mapText(loc.Pos(), loc.End())
+			c.serviceText.WriteString("\n")
 		}
 
 		if c.scriptEl == nil {
 			c.serviceText.WriteString("export default {} as unknown as Awaited<typeof __VLS_Export>\n")
 		}
+	}
+
+	if c.scriptEl == nil && c.scriptSetupEl == nil {
+		generateTemplate(c.codegenCtx, templateEl)
 	}
 }
